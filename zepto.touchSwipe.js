@@ -10,7 +10,8 @@
 	"use strict";
 
 	//Constants
-	var LEFT = "left",
+	var VERSION = "1.6.9",
+		LEFT = "left",
 		RIGHT = "right",
 		UP = "up",
 		DOWN = "down",
@@ -74,7 +75,8 @@
 		triggerOnTouchLeave:false, 
 		allowPageScroll: "auto", 
 		fallbackToMouseEvents: true,	
-		excludedElements:"label, button, input, select, textarea, a, .noSwipe"
+		excludedElements:"label, button, input, select, textarea, a, .noSwipe",
+		preventDefaultEvents:true
 	};
 
 	$.fn.swipe = function (method) {
@@ -96,6 +98,14 @@
 
 		return $this;
 	};
+	
+	/**
+	 * The version of the plugin
+	 * @readonly
+	 */
+	$.fn.swipe.version = VERSION;
+
+
 
 	//Expose our defaults so a user could override the plugin defaults
 	$.fn.swipe.defaults = defaults;
@@ -313,13 +323,13 @@
 		* Destroy the swipe plugin completely. To use any swipe methods, you must re initialise the plugin.
 		* @function
 		* @name $.fn.swipe#destroy
-		* @return {DOMNode} The Dom element that was registered with TouchSwipe 
+		
 		* @example $("#element").swipe("destroy");
 		*/
 		this.destroy = function () {
 			removeListeners();
 			$element.data(PLUGIN_NS, null);
-			return $element;
+			$element = null;
 		};
 
 
@@ -376,16 +386,17 @@
 			var event = zpEvent.originalEvent ? zpEvent.originalEvent : zpEvent;
 			
 			var ret,
-				evt = SUPPORTS_TOUCH ? event.touches[0] : event;
+				touches = event.touches,
+				evt = touches ? touches[0] : event;
 
 			phase = PHASE_START;
 
 			//If we support touches, get the finger count
-			if (SUPPORTS_TOUCH) {
+			if (touches) {
 				// get the total number of fingers touching the screen
-				fingerCount = event.touches.length;
+				fingerCount = touches.length;
 			}
-			//Else this is the desktop, so stop the browser from dragging the image
+			//Else this is the desktop, so stop the browser from dragging content
 			else {
 				zpEvent.preventDefault(); //call this on jq event so we are cross browser
 			}
@@ -405,7 +416,7 @@
 
 			
 			// check the number of fingers is what we are looking for, or we are capturing pinches
-			if (!SUPPORTS_TOUCH || (fingerCount === options.fingers || options.fingers === ALL_FINGERS) || hasPinches()) {
+			if (!touches || (fingerCount === options.fingers || options.fingers === ALL_FINGERS) || hasPinches()) {
 				// get the coordinates of the touch
 				createFingerData( 0, evt );
 				startTime = getTimeStamp();
@@ -413,7 +424,7 @@
 				if(fingerCount==2) {
 					//Keep track of the initial pinch distance, so we can calculate the diff later
 					//Store second finger data as start
-					createFingerData( 1, event.touches[1] );
+					createFingerData( 1, touches[1] );
 					startTouchesDistance = endTouchesDistance = calculateTouchesDistance(fingerData[0].start, fingerData[1].start);
 				}
 				
@@ -469,15 +480,16 @@
 				return;
 
 			var ret,
-				evt = SUPPORTS_TOUCH ? event.touches[0] : event;
+				touches = event.touches,
+				evt = touches ? touches[0] : event;
 			
 
 			//Update the  finger data 
 			var currentFinger = updateFingerData(evt);
 			endTime = getTimeStamp();
 			
-			if (SUPPORTS_TOUCH) {
-				fingerCount = event.touches.length;
+			if (touches) {
+				fingerCount = touches.length;
 			}
 
 			if (options.hold)
@@ -492,12 +504,12 @@
 				//We do this here as well as the start event, in case they start with 1 finger, and the press 2 fingers
 				if(startTouchesDistance==0) {
 					//Create second finger if this is the first time...
-					createFingerData( 1, event.touches[1] );
+					createFingerData( 1, touches[1] );
 					
 					startTouchesDistance = endTouchesDistance = calculateTouchesDistance(fingerData[0].start, fingerData[1].start);
 				} else {
 					//Else just update the second finger
-					updateFingerData(event.touches[1]);
+					updateFingerData(touches[1]);
 				
 					endTouchesDistance = calculateTouchesDistance(fingerData[0].end, fingerData[1].end);
 					pinchDirection = calculatePinchDirection(fingerData[0].end, fingerData[1].end);
@@ -509,7 +521,9 @@
 			}
 			
 			
-			if ( (fingerCount === options.fingers || options.fingers === ALL_FINGERS) || !SUPPORTS_TOUCH || hasPinches() ) {
+			
+
+			if ( (fingerCount === options.fingers || options.fingers === ALL_FINGERS) || !touches || hasPinches() ) {
 				
 				direction = calculateDirection(currentFinger.start, currentFinger.end);
 				
@@ -575,13 +589,14 @@
 		*/
 		function touchEnd(zpEvent) {
 			//As we use Zepto bind for events, we need to target the original event object
-			var event = zpEvent.originalEvent ? zpEvent.originalEvent : zpEvent;
-				
+			//If these events are being programmatically triggered, we don't have an original event object, so use the zp one.
+			var event = zpEvent.originalEvent ? zpEvent.originalEvent : zpEvent,
+			    touches = event.touches;
 
 			//If we are still in a touch with another finger return
 			//This allows us to wait a fraction and see if the other finger comes up, if it does within the threshold, then we treat it as a multi release, not a single release.
-			if (SUPPORTS_TOUCH) {
-				if(event.touches.length>0) {
+			if (touches) {
+				if(touches.length) {
 					startMultiFingerRelease();
 					return true;
 				}
@@ -722,37 +737,42 @@
 		* @inner
 		*/
 		function triggerHandler(event, phase) {
-			
-			var ret = undefined;
-			
-			// SWIPE GESTURES
-			if(didSwipe() || hasSwipes()) { //hasSwipes as status needs to fire even if swipe is invalid
-				//Trigger the swipe events...
-				ret = triggerHandlerForGesture(event, phase, SWIPE);
-			} 
-			
-			// PINCH GESTURES (if the above didn't cancel)
-			else if((didPinch() || hasPinches()) && ret!==false) {
-				//Trigger the pinch events...
-				ret = triggerHandlerForGesture(event, phase, PINCH);
-			}
-			
-			// CLICK / TAP (if the above didn't cancel)
-			if(didDoubleTap() && ret!==false) {
-				//Trigger the tap events...
-				ret = triggerHandlerForGesture(event, phase, DOUBLE_TAP);
-			}
-			
-			// CLICK / TAP (if the above didn't cancel)
-			else if(didLongTap() && ret!==false) {
-				//Trigger the tap events...
-				ret = triggerHandlerForGesture(event, phase, LONG_TAP);
-			}
 
-			// CLICK / TAP (if the above didn't cancel)
-			else if(didTap() && ret!==false) {
-				//Trigger the tap event..
-				ret = triggerHandlerForGesture(event, phase, TAP);
+			var ret,
+				touches = event.touches;
+			
+			//Swipes and pinches are not mutually exclusive - can happend at same time, so need to trigger 2 events potentially
+			if( (didSwipe() || hasSwipes()) || (didPinch() || hasPinches()) ) {
+				// SWIPE GESTURES
+				if(didSwipe() || hasSwipes()) { //hasSwipes as status needs to fire even if swipe is invalid
+					//Trigger the swipe events...
+					ret = triggerHandlerForGesture(event, phase, SWIPE);
+				}	
+
+				// PINCH GESTURES (if the above didn't cancel)
+				if((didPinch() || hasPinches()) && ret!==false) {
+					//Trigger the pinch events...
+					ret = triggerHandlerForGesture(event, phase, PINCH);
+				}
+			} else {
+			 
+				// CLICK / TAP (if the above didn't cancel)
+				if(didDoubleTap() && ret!==false) {
+					//Trigger the tap events...
+					ret = triggerHandlerForGesture(event, phase, DOUBLE_TAP);
+				}
+				
+				// CLICK / TAP (if the above didn't cancel)
+				else if(didLongTap() && ret!==false) {
+					//Trigger the tap events...
+					ret = triggerHandlerForGesture(event, phase, LONG_TAP);
+				}
+
+				// CLICK / TAP (if the above didn't cancel)
+				else if(didTap() && ret!==false) {
+					//Trigger the tap event..
+					ret = triggerHandlerForGesture(event, phase, TAP);
+				}
 			}
 			
 			
@@ -765,8 +785,8 @@
 			// If we are ending the gesture, then manually trigger the reset handler IF all fingers are off
 			if(phase === PHASE_END) {
 				//If we support touch, then check that all fingers are off before we cancel
-				if (SUPPORTS_TOUCH) {
-					if(event.touches.length==0) {
+				if (touches) {
+					if(!touches.length) {
 						touchCancel(event);	
 					}
 				} 
@@ -791,7 +811,7 @@
 		*/
 		function triggerHandlerForGesture(event, phase, gesture) {	
 			
-			var ret=undefined;
+			var ret;
 			
 			//SWIPES....
 			if(gesture==SWIPE) {
@@ -1071,7 +1091,7 @@
 		* @inner
 		*/
 		function validateDefaultEvent(zpEvent, direction) {
-			if (options.allowPageScroll === NONE || hasPinches()) {
+			if (options.allowPageScroll === NONE) {
 				zpEvent.preventDefault();
 			} else {
 				var auto = options.allowPageScroll === AUTO;

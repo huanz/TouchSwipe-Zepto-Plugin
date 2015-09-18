@@ -1,0 +1,9 @@
+{
+  "name": "zepto-touchswipe",
+  "version": "1.6.9",
+  "main": "./zepto.touchSwipe.js",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/huanz/TouchSwipe-Zepto-Plugin.git"
+  }
+}

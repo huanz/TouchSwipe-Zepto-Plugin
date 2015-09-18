@@ -2,7 +2,7 @@
 
 github项目地址：[https://github.com/mattbryson/TouchSwipe-Jquery-Plugin](https://github.com/mattbryson/TouchSwipe-Jquery-Plugin)
 
-本改装是基于官网的1.6.6，只需要zepto的核心模块：zepto,event,data(可选)
+本改装是基于官网的1.6.9，只需要zepto的核心模块：zepto,event,data(可选)
 
 
 # Demos #
